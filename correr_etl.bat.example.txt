@@ -1,0 +1,3 @@
+@echo off
+cd /d "RUTA\A\TU\PROYECTO"
+"RUTA\A\TU\python.exe" orquestador.py
