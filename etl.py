@@ -1,3 +1,4 @@
+import logging
 import os
 import pandas as pd
 from sqlalchemy import create_engine
@@ -53,33 +54,41 @@ def transformar(fondos, inversores, transacciones):
 
 def cargar(fondos, inversores, transacciones):
     """Escribe las tres tablas limpias en la base de destino."""
-    fondos.to_sql("fondos", con=engine_destino, if_exists="replace", index=False)
-    inversores.to_sql("inversores", con=engine_destino, if_exists="replace", index=False)
-    transacciones.to_sql("transacciones", con=engine_destino, if_exists="replace", index=False)
+    momento_carga = pd.Timestamp.now()
 
+    fondos = fondos.copy()
+    inversores = inversores.copy()
+    transacciones = transacciones.copy()
+
+    fondos["fecha_carga"] = momento_carga
+    inversores["fecha_carga"] = momento_carga
+    transacciones["fecha_carga"] = momento_carga
+
+    fondos.to_sql("fondos", engine_destino, if_exists="replace", index=False)
+    inversores.to_sql("inversores", engine_destino, if_exists="replace", index=False)
+    transacciones.to_sql("transacciones", engine_destino, if_exists="replace", index=False)
 
 def reportar(fondos_v, inversores_v, inversores_i, transacciones_v, transacciones_i):
-    """Reporte del proceso, tabla por tabla."""
-    print("=" * 45)
-    print("REPORTE ETL")
-    print("=" * 45)
-    print(f"Fondos cargados:        {len(fondos_v)}")
-    print(f"Inversores cargados:    {len(inversores_v)}  (descartados: {len(inversores_i)})")
-    print(f"Transacciones cargadas: {len(transacciones_v)}  (descartadas: {len(transacciones_i)})")
-    print("-" * 45)
+    """Registra el resultado del proceso: éxitos resumidos, descartes detallados."""
+    logging.info("----- REPORTE DE CARGA -----")
+    logging.info(f"Fondos cargados: {len(fondos_v)}")
+    logging.info(f"Inversores cargados correctamente: {len(inversores_v)}")
+    logging.info(f"Transacciones cargadas correctamente: {len(transacciones_v)}")
 
-    if len(inversores_i) > 0:
-        print("Inversores descartados:")
+# Descartes: se detallan uno por uno, como WARNING
+    if(len(inversores_i) > 0):
+        logging.warning(f"Inversores descartados: {len(inversores_i)}")
         for _, r in inversores_i.iterrows():
-            motivo = "Email vacío" if (r["email"] == "" or pd.isna(r["email"])) else "Fondo inválido"
-            print(f"  id {r['id_inversor']}: {motivo}")
+            motivo = "Email vacío o nulo" if (r["email"] == "" or pd.isna(r["email"])) else "Fondo inválido"
+            logging.warning(f" Inversion id {r['id_inversor']}: {motivo}")
 
-    if len(transacciones_i) > 0:
-        print("Transacciones descartadas:")
+    if(len(transacciones_i) > 0):
+        logging.warning(f"Transacciones descartadas: {len(transacciones_i)}")
         for _, r in transacciones_i.iterrows():
-            motivo = "Monto inválido" if r["monto"] <= 0 else "Fecha inválida" if pd.isna(r["fecha"]) else "Inversor inexistente"
-            print(f"  id {r['id']}: {motivo}")
-    print("=" * 45)
+            motivo = "Monto <= 0" if (r["monto"] <= 0) else "Fecha nula" if pd.isna(r["fecha"]) else "Inversor inválido"
+            logging.warning(f" Transacción id {r['id']}: {motivo}")
+
+    logging.info("----- FIN DEL REPORTE -----")
 
 
 # def main():
