@@ -75,6 +75,41 @@ def GenerarTransacciones(ids_inversores):
     return pd.DataFrame(transacciones)
 
 
+def agregar_lote_nuevo(cantidad=50):
+    """Agrega un lote nuevo de transacciones al origen, sin borrar las existentes.
+    Los ids arrancan después del último existente para no chocar."""
+    # Averiguar cuál es el id más alto que ya existe en el origen
+    ultimo_id = pd.read_sql(
+        "SELECT MAX(id) AS max_id FROM transacciones", engine_origen
+    )["max_id"][0]
+    inicio = int(ultimo_id) + 1
+
+    # Traer los inversores que ya existen, para que las nuevas apunten a ellos
+    ids_inversores = pd.read_sql("SELECT id_inversor FROM inversores", engine_origen)[
+        "id_inversor"
+    ].tolist()
+
+    nuevas = []
+    for i in range(inicio, inicio + cantidad):
+        nuevas.append(
+            {
+                "id": i,
+                "fecha": fake.date_between(start_date="-1y"),
+                "id_inversor": random.choice(ids_inversores),
+                "monto": round(random.uniform(100, 100000), 2),
+                "moneda": random.choice(["USD", "EUR"]),
+            }
+        )
+
+    df_nuevas = pd.DataFrame(nuevas)
+    df_nuevas.to_sql(
+        "transacciones", con=engine_origen, if_exists="append", index=False
+    )
+    print(
+        f"Se agregaron {cantidad} transacciones nuevas (ids {inicio} a {inicio + cantidad - 1})."
+    )
+
+
 def main():
     print("generando datos"),
     fondos = GenerarFondos()
@@ -94,4 +129,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    agregar_lote_nuevo(50)
