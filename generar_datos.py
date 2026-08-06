@@ -129,4 +129,4 @@ def main():
 
 
 if __name__ == "__main__":
-    agregar_lote_nuevo(50)
+    main()

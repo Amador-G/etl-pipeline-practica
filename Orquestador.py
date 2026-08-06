@@ -1,8 +1,18 @@
+import os
+import smtplib
+from email.mime.text import MIMEText
+from dotenv import load_dotenv
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from sqlalchemy import text
 import etl
+
+load_dotenv()
+EMAIL_ORIGEN = os.getenv("EMAIL_ORIGEN")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_DESTINO = os.getenv("EMAIL_DESTINO")
+
 
 # --- Configuración del logging con rotación diaria ---
 file_handler = TimedRotatingFileHandler(
@@ -39,6 +49,29 @@ def registrar_ejecucion(inicio, fin, estado, contadores, mensaje_error=""):
             },
         )
 
+def enviar_notificacion(estado, contadores, mensaje_error=""):
+    """Envía un mail con el resumen de la corrida."""
+    asunto = f"ETL finalizado: {estado}"
+
+    cuerpo = f"""Proceso ETL finalizado con estado: {estado}
+
+Fondos cargados: {contadores.get('fondos', 0)}
+Inversores cargados: {contadores.get('inv_ok', 0)}
+Inversores descartados: {contadores.get('inv_desc', 0)}
+Transacciones nuevas cargadas: {contadores.get('txn_cargadas', 0)}
+Transacciones descartadas: {contadores.get('txn_desc', 0)}
+"""
+    if mensaje_error:
+        cuerpo += f"\nError: {mensaje_error}"
+
+    mensaje = MIMEText(cuerpo)
+    mensaje["Subject"] = asunto
+    mensaje["From"] = EMAIL_ORIGEN
+    mensaje["To"] = EMAIL_DESTINO
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as servidor:
+        servidor.login(EMAIL_ORIGEN, EMAIL_PASSWORD)
+        servidor.send_message(mensaje)
 
 def ejecutar_etl():
     """Orquesta el proceso ETL completo, con control de pasos, logging y auditoría."""
@@ -91,12 +124,16 @@ def ejecutar_etl():
         raise
 
     finally:
-        fin = datetime.now()
-        registrar_ejecucion(inicio, fin, estado, contadores, mensaje_error)
-        logging.info(
-            f"Registro de ejecución insertado en la tabla de control: estado={estado}"
-        )
-
+            fin = datetime.now()
+            registrar_ejecucion(inicio, fin, estado, contadores, mensaje_error)
+            logging.info(f"Registro de ejecución insertado en la tabla de control: estado={estado}")
+            try:
+                enviar_notificacion(estado, contadores, mensaje_error)
+                logging.info("Notificación por mail enviada.")
+            except Exception as e:
+                logging.error(f"No se pudo enviar la notificación: {e}")
+    
 
 if __name__ == "__main__":
     ejecutar_etl()
+
